@@ -36,7 +36,6 @@ source venv/bin/activate
 ```bash
 pip install -U pip
 pip install -r requirements.txt
-pip install datasets pillow requests tqdm bitsandbytes
 ```
 
 Notes:
