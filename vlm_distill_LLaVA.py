@@ -15,9 +15,12 @@ from tqdm import tqdm
 # ----- CONFIGS -----
 VISION_ENCODER_NAME = "google/siglip-so400m-patch14-384" 
 LANGUAGE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct" 
+MODEL_FINETUNE = True
 
-DATASET = "tyb197/RoboAfford"
-OUTPUT_DIR = f"checkpoints/{VISION_ENCODER_NAME.split('/')[-1]}_{LANGUAGE_MODEL_NAME.split('/')[-1]}"
+# 1. UPDATED DATASET REPOSITORY
+DATASET = "liuhaotian/LLaVA-Pretrain"
+IMAGE_BASE_DIR = Path("llava_images_100k")
+OUTPUT_DIR = f"checkpoints/{VISION_ENCODER_NAME.split('/')[-1]}__{LANGUAGE_MODEL_NAME.split('/')[-1]}__LLaVA"
 
 if torch.cuda.is_available():
     DEVICE = "cuda"
@@ -26,8 +29,11 @@ else:
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, DATASET, split):
-        self.dataset = load_dataset(DATASET, data_files="LVIS_absxy_513K.json")
-        train_test_split = self.dataset["train"].train_test_split(test_size=0.2)
+        # Load your newly created, perfectly matched 100k subset
+        full_dataset = load_dataset("json", data_files="blip_100k_subset.json", split="train")
+        
+        # Split the 100k subset into Train (80k) and Test (20k)
+        train_test_split = full_dataset.train_test_split(test_size=0.2, seed=42)
         
         if split == "train":
             self.dataset = train_test_split['train']
@@ -40,38 +46,27 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         item = self.dataset[idx]
 
-        # Process image robustly
-        image = item["image"]
-        if isinstance(image, str):
+        # FIX 2: Load the image directly from your local extracted folder
+        image_path_str = item.get("image")
+        
+        if image_path_str:
+            # Construct the absolute path to the image on your hard drive
+            local_image_path = IMAGE_BASE_DIR / image_path_str
             try:
-                response = requests.get(image, timeout=10)
-                response.raise_for_status()
-                image = Image.open(BytesIO(response.content)).convert("RGB")
-            except Exception:
-                image = Image.new("RGB", (256, 256), color=0)
-        elif isinstance(image, dict):
-            if image.get("bytes") is not None:
-                image = Image.open(BytesIO(image["bytes"])).convert("RGB")
-            elif image.get("path") is not None:
-                image = Image.open(image["path"]).convert("RGB")
-            else:
+                image = Image.open(local_image_path).convert("RGB")
+            except Exception as e:
+                print(f"Warning: Could not load {local_image_path} - {e}")
                 image = Image.new("RGB", (256, 256), color=0)
         else:
-            if hasattr(image, "convert"):
-                image = image.convert("RGB")
-
-        if image is None or not hasattr(image, "size"):
             image = Image.new("RGB", (256, 256), color=0)
 
-        # ----- 1. COORDINATE NORMALIZATION -----
+        # ----- COORDINATE NORMALIZATION (Safely ignores non-coordinate text) -----
         width, height = image.size
         
-        # Regex to find absolute bounding boxes like: [(355.16, 20.48, 382.48, 51.2)]
         bbox_pattern = r"\[\(([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\)\]"
         
         def normalize_match(match):
             x1, y1, x2, y2 = map(float, match.groups())
-            # Convert to a [0, 1000] relative integer scale
             nx1 = max(0, min(1000, int((x1 / width) * 1000)))
             ny1 = max(0, min(1000, int((y1 / height) * 1000)))
             nx2 = max(0, min(1000, int((x2 / width) * 1000)))
@@ -84,7 +79,6 @@ class Dataset(torch.utils.data.Dataset):
         
         gpt_reply = next((c["value"] for c in conversations if c["from"] == "gpt"), "")
         
-        # Apply normalization to both the question and the answer
         human_query = re.sub(bbox_pattern, normalize_match, human_query)
         gpt_reply = re.sub(bbox_pattern, normalize_match, gpt_reply)
         
@@ -112,7 +106,6 @@ def load_vision_encoder(model_name):
     return model, processor
 
 def load_language_model(model_name):
-    # ----- 2. QLORA IMPLEMENTATION -----
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
@@ -127,10 +120,8 @@ def load_language_model(model_name):
         device_map="auto"
     )
 
-    # Prepares the model for k-bit training (gradient checkpointing, etc.)
     model = prepare_model_for_kbit_training(model)
 
-    # Target the attention and feed-forward linear layers for adaptation
     peft_config = LoraConfig(
         r=16,
         lora_alpha=32,
@@ -162,10 +153,11 @@ class VLMModel(torch.nn.Module):
         if vision_hidden_size is None:
             raise ValueError("Could not infer vision hidden size from vision encoder config.")
 
-        # ----- 3. MLP PROJECTOR -----
-        self.projector = nn.Linear(vision_hidden_size, language_model.config.hidden_size)
-
-        # Cast projector to bfloat16 to match the QLoRA compute dtype
+        self.projector = nn.Sequential(
+            nn.Linear(vision_hidden_size, language_model.config.hidden_size),
+            nn.GELU(),
+            nn.Linear(language_model.config.hidden_size, language_model.config.hidden_size)
+        )
         self.projector.to(torch.bfloat16)
 
     def forward(self, vision_inputs, input_ids, attention_mask, labels=None):
@@ -181,10 +173,8 @@ class VLMModel(torch.nn.Module):
             vision_outputs = self.vision_encoder(**vision_inputs)
             vision_features = vision_outputs.last_hidden_state
 
-        # Forward pass through the MLP
         projected_features = self.projector(vision_features.to(device=DEVICE, dtype=torch.bfloat16))
 
-        # We don't use torch.no_grad() here because we are training LoRA weights
         text_embeddings = self.language_model.get_input_embeddings()(input_ids)
 
         input_embeddings = torch.cat([projected_features, text_embeddings], dim=1)
@@ -246,7 +236,6 @@ def train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, e
     model.train()
     model.to(device)
 
-    # Automatically pulls trainable parameters (MLP Projector + LoRA adapters)
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     optimizer.zero_grad()
 
@@ -281,7 +270,6 @@ def save_vlm_model(model, language_tokenizer, vision_encoder_name, language_mode
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # 4. SAVE LORA ADAPTERS: Save the language model PEFT adapter
     model.language_model.save_pretrained(str(output_path))
     language_tokenizer.save_pretrained(str(output_path))
 
@@ -306,7 +294,6 @@ def main():
     model = VLMModel(vision_encoder, language_model)
     model.projector.to(DEVICE)
 
-    # Note: Slightly higher learning rate (2e-4) is standard for QLoRA fine-tuning
     train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, epochs=1, device=DEVICE)
 
     save_vlm_model(
