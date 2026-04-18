@@ -7,3 +7,4 @@ pillow
 requests
 tqdm
 bitsandbytes
+huggingface_hub

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 import requests
 import re
 from io import BytesIO
@@ -13,8 +14,8 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 # ----- CONFIGS -----
-VISION_ENCODER_NAME = "google/siglip-so400m-patch14-384" 
-LANGUAGE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct" 
+VISION_ENCODER_NAME = "wkcn/TinyCLIP-ViT-61M-32-Text-29M-LAION400M" # "google/siglip-so400m-patch14-384" "google/siglip-base-patch16-384" "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
+LANGUAGE_MODEL_NAME = "MiniLLM/MiniPLM-Qwen-200M" # "Qwen/Qwen2.5-0.5B-Instruct" "openai-community/gpt2-medium" "MiniLLM/MiniPLM-Qwen-200M" "HuggingFaceTB/SmolLM-135M"
 MODEL_FINETUNE = True
 
 # 1. UPDATED DATASET REPOSITORY
@@ -84,24 +85,25 @@ class Dataset(torch.utils.data.Dataset):
         
         combined_text = f"User: {human_query}\nAssistant: {gpt_reply}"
 
+        print(item)
+
         return image, combined_text
 
-def load_vision_encoder(model_name):
+def load_vision_encoder(model_name, freeze=True):
     model = AutoModel.from_pretrained(
         model_name,
         torch_dtype="auto",
         trust_remote_code=True,
     )
-
-    if hasattr(model, "vision_model"):
-        model = model.vision_model
+    # print(model.config)
 
     print(f"Vision Encoder is running on: {next(model.parameters()).device}")
 
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
 
-    for param in model.parameters():
-        param.requires_grad = False
+    if freeze:
+        for param in model.parameters():
+            param.requires_grad = False
 
     return model, processor
 
@@ -120,12 +122,21 @@ def load_language_model(model_name):
         device_map="auto"
     )
 
+    # print(model.config)
+
     model = prepare_model_for_kbit_training(model)
+
+    if LANGUAGE_MODEL_NAME in ["Qwen/Qwen2.5-0.5B-Instruct"]:
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    elif LANGUAGE_MODEL_NAME in ["openai-community/gpt2-medium"]:
+        target_modules = ["c_attn", "c_proj", "c_fc"]
+    else:
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
     peft_config = LoraConfig(
         r=16,
         lora_alpha=32,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=target_modules,
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM"
@@ -146,10 +157,13 @@ class VLMModel(torch.nn.Module):
         self.vision_encoder = vision_encoder
         self.language_model = language_model
 
+        # print(vision_encoder.config)
         vision_hidden_size = getattr(vision_encoder.config, "hidden_size", None)
         if vision_hidden_size is None and hasattr(vision_encoder.config, "vision_config"):
             vision_hidden_size = vision_encoder.config.vision_config.hidden_size
-
+        elif vision_hidden_size is None and hasattr(vision_encoder.config, "hidden_sizes"):
+            vision_hidden_size = vision_encoder.config.hidden_sizes[-1]
+        
         if vision_hidden_size is None:
             raise ValueError("Could not infer vision hidden size from vision encoder config.")
 
@@ -232,7 +246,7 @@ class VLMModel(torch.nn.Module):
         
         return generated_ids
 
-def train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, epochs=1, accumulation_steps=8, device="cuda"):
+def train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, epochs=1, accumulation_steps=8, device="cuda"):
     model.train()
     model.to(device)
 
@@ -240,16 +254,19 @@ def train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, e
     optimizer.zero_grad()
 
     for epoch in range(epochs):
-        loop = tqdm(range(len(train_dataset)), desc=f"Epoch {epoch+1}")
+        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}")
         
-        for step_idx in loop:
-            raw_image, raw_text = train_dataset[step_idx]
-
-            vision_inputs = vision_processor(images=raw_image, return_tensors="pt")
+        for step_idx, (raw_image, raw_text) in enumerate(loop):
+            vision_inputs = vision_processor(
+                images=raw_image, 
+                return_tensors="pt"
+            )
             
             text_inputs = language_tokenizer(
                 raw_text, 
-                return_tensors="pt" 
+                return_tensors="pt",
+                padding=True,
+                truncation=True
             )
 
             input_ids = text_inputs.input_ids.to(device)
@@ -260,7 +277,7 @@ def train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, e
             loss = outputs.loss / accumulation_steps
             loss.backward()
 
-            if (step_idx + 1) % accumulation_steps == 0 or (step_idx + 1) == len(train_dataset):
+            if (step_idx + 1) % accumulation_steps == 0 or (step_idx + 1) == len(train_loader):
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -269,6 +286,9 @@ def train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, e
 def save_vlm_model(model, language_tokenizer, vision_encoder_name, language_model_name, output_dir=OUTPUT_DIR):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # model.vision_encoder.save_pretrained(str(output_path))
+    # vision_processor.save_pretrained(str(output_path))
 
     model.language_model.save_pretrained(str(output_path))
     language_tokenizer.save_pretrained(str(output_path))
@@ -281,20 +301,26 @@ def save_vlm_model(model, language_tokenizer, vision_encoder_name, language_mode
     torch.save(projector_payload, output_path / "projector.pt")
     print(f"Saved VLM artifacts (LoRA + Projector) to: {output_path.resolve()}")
 
+def collate_fn(batch):
+    images = [item[0] for item in batch]
+    texts = [item[1] for item in batch]
+    return images, texts
+
 def main():
     torch.cuda.empty_cache()
     encoder_name = VISION_ENCODER_NAME
-    vision_encoder, vision_processor = load_vision_encoder(encoder_name)
+    vision_encoder, vision_processor = load_vision_encoder(encoder_name, freeze=True)
 
     model_name = LANGUAGE_MODEL_NAME
     language_model, language_tokenizer = load_language_model(model_name)
 
     train_dataset = Dataset(DATASET, split="train")
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
     model = VLMModel(vision_encoder, language_model)
     model.projector.to(DEVICE)
 
-    train(model, train_dataset, vision_processor, language_tokenizer, lr=2e-4, epochs=1, device=DEVICE)
+    train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, epochs=1, device=DEVICE)
 
     save_vlm_model(
         model=model,

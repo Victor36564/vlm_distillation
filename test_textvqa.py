@@ -6,13 +6,13 @@ from peft import PeftModel
 
 # Import the architecture and configs from your main training script
 # Ensure your training script is named 'vlm_distill.py'
-from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
+from vlm_distill_textvqa import VLMModel, Dataset, DATASET, DEVICE, load_vision_encoder
 
 # OUTPUT_DIR = "checkpoints/dinov3-convnext-tiny-pretrain-lvd1689m__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-base-patch16-384__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
-OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
+OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__MiniPLM-Qwen-200M__LLaVA"
 
 def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     """
@@ -31,14 +31,7 @@ def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     language_model_name = payload["language_model_name"]
 
     # 1. Load Base Vision Encoder
-    print(f"Loading base Vision Encoder: {vision_encoder_name}")
-    vision_encoder = AutoModel.from_pretrained(vision_encoder_name, torch_dtype="auto", trust_remote_code=True)
-    if hasattr(vision_encoder, "vision_model"):
-        vision_encoder = vision_encoder.vision_model
-    vision_processor = AutoProcessor.from_pretrained(vision_encoder_name, trust_remote_code=True)
-
-    # Load unfrozen vision encoder weights from training (if available)
-    vision_model
+    vision_encoder, vision_processor, text_processor = load_vision_encoder(vision_encoder_name)
     
     for param in vision_encoder.parameters(): 
         param.requires_grad = False
@@ -69,15 +62,16 @@ def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     print("Rebuilding VLM Model and injecting trained projector weights...")
     model = VLMModel(vision_encoder, language_model)
     
-    model.projector.load_state_dict(payload["projector_state_dict"])
-    model.projector.to(torch.bfloat16)
-    model.projector.to(device)
-    model.eval()
+    model.vision_projector.load_state_dict(payload["vision_projector_state_dict"])
 
-    return model, vision_processor, language_tokenizer
+    model.text_projector.load_state_dict(payload["text_projector_state_dict"])
+
+    model.to(device)
+
+    return model, vision_processor, text_processor, language_tokenizer
 
 @torch.no_grad()
-def test_single_sample(model, dataset, vision_processor, tokenizer, device="cuda", idx=None):
+def test_single_sample(model, dataset, vision_processor, text_processor, tokenizer, device="cuda", idx=None):
     """
     Tests a single sample from the dataset and prints the Ground Truth vs Model Output.
     """
@@ -90,19 +84,18 @@ def test_single_sample(model, dataset, vision_processor, tokenizer, device="cuda
     print(f"--- RUNNING INFERENCE ON TEST SAMPLE {idx} ---")
     
     # 1. Fetch raw data
-    raw_image, gt_text = dataset[idx]
+    raw_image, raw_caption, raw_qa_text = dataset[idx]
 
     # raw_image = "images_test/bowl.jpg"
 
     # 2. Extract just the question to feed the model
-    if "\nAssistant:" in gt_text:
-        raw_query = gt_text.split("\nAssistant:")[0].replace("User: ", "").strip()
-        expected_answer = gt_text.split("\nAssistant:")[1].strip()
+    if "\nAssistant:" in raw_qa_text:
+        raw_query = raw_qa_text.split("\nAssistant:")[0].replace("User: ", "").strip()
+        expected_answer = raw_qa_text.split("\nAssistant:")[1].strip()
     else:
-        raw_query = gt_text
+        raw_query = raw_qa_text
         expected_answer = "N/A"
 
-    raw_query = "Is there a bowl in this image?"
     # 3. Format using the strict Qwen chat template
     messages = [{"role": "user", "content": raw_query}]
     prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -114,13 +107,15 @@ def test_single_sample(model, dataset, vision_processor, tokenizer, device="cuda
 
     # 5. Process Image
     vision_inputs = vision_processor(images=raw_image, return_tensors="pt")
+    encoder_text_inputs = text_processor(text=raw_caption, return_tensors="pt", padding=True, truncation=True)
 
     # 6. Generate Prediction
     generated_ids = model.generate(
         vision_inputs=vision_inputs,
+        text_inputs=encoder_text_inputs,
         input_ids=input_ids,
         attention_mask=attention_mask,
-        max_new_tokens=40,
+        max_new_tokens=100,
         tokenizer=tokenizer
     )
 
@@ -136,14 +131,14 @@ def main():
     torch.cuda.empty_cache()
 
     # 1. Load the fully trained model (Base Models + LoRA + MLP Projector)
-    model, vision_processor, language_tokenizer = load_trained_model(OUTPUT_DIR, device=DEVICE)
+    model, vision_processor, text_processor, language_tokenizer = load_trained_model(OUTPUT_DIR, device=DEVICE)
 
     # 2. Load the test split of the dataset
     print(f"\nLoading dataset: {DATASET} (Test Split)")
     test_dataset = Dataset(DATASET, split="train")
 
     # 3. Run evaluation on a random sample (or specify an idx to test a specific one)
-    test_single_sample(model, test_dataset, vision_processor, language_tokenizer, device=DEVICE, idx=60482)
+    test_single_sample(model, test_dataset, vision_processor, text_processor, language_tokenizer, device=DEVICE, idx=random.randint(0, len(test_dataset)-1))
 
 if __name__ == "__main__":
     main()
