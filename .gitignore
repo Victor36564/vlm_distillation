@@ -1,7 +1,6 @@
 /venv/
 =0.46.1
 /checkpoints/
-images_test/
 llava_images_100k/
 blip_100k_subset.json
 blip_laion_cc_sbu_558k.json
