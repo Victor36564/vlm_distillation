@@ -11,7 +11,7 @@ from pathlib import Path
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 from test_LLaVA import load_trained_model
 
-OUTPUT_DIR = "checkpoints/dinov3-convnext-tiny-pretrain-lvd1689m__Qwen2.5-0.5B-Instruct__LLaVA"
+OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__SmolLM-135M__LLaVA"
 
 payload = {
     "prompt": "Summarize the image in one sentence.",
@@ -75,7 +75,8 @@ async def chat_endpoint(request: ChatRequest):
 
     # 3. Format using the strict Qwen chat template
     messages = [{"role": "user", "content": raw_query}]
-    prompt_text = language_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    # prompt_text = language_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    prompt_text = f"User: {request.prompt}\nAssistant: "
 
     # 4. Tokenize Text
     text_inputs = language_tokenizer(prompt_text, return_tensors="pt")

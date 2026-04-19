@@ -19,7 +19,7 @@ LANGUAGE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct" # "Qwen/Qwen2.5-0.5B-Instruct
 
 # 1. UPDATED DATASET REPOSITORY
 DATASET = "facebook/textvqa"
-OUTPUT_DIR = f"checkpoints/{VISION_ENCODER_NAME.split('/')[-1]}__{LANGUAGE_MODEL_NAME.split('/')[-1]}__LLaVA"
+OUTPUT_DIR = f"checkpoints/{VISION_ENCODER_NAME.split('/')[-1]}__{LANGUAGE_MODEL_NAME.split('/')[-1]}__textvqa"
 
 if torch.cuda.is_available():
     DEVICE = "cuda"
@@ -282,7 +282,7 @@ def train(model, train_loader, vision_processor, text_processor, language_tokeni
 
         epoch_bar.set_postfix(loss=total_loss / n)
         
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 1 == 0:
             if total_loss / n < best_loss:
                 best_loss = total_loss / n
 
