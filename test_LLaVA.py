@@ -8,13 +8,9 @@ from peft import PeftModel
 # Ensure your training script is named 'vlm_distill.py'
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 
-# OUTPUT_DIR = "checkpoints/dinov3-convnext-tiny-pretrain-lvd1689m__Qwen2.5-0.5B-Instruct__LLaVA"
-# OUTPUT_DIR = "checkpoints/siglip-base-patch16-384__Qwen2.5-0.5B-Instruct__LLaVA"
-# OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
-# OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
-OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
+MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
 
-def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
+def load_trained_model(output_dir=MODEL_DIR, device="cuda"):
     """
     Loads the base models, attaches the trained LoRA adapter to the language model,
     and injects the trained MLP projector weights.
@@ -90,8 +86,6 @@ def test_single_sample(model, dataset, vision_processor, tokenizer, device="cuda
     # 1. Fetch raw data
     raw_image, gt_text = dataset[idx]
 
-    # raw_image = "images_test/bowl.jpg"
-
     # 2. Extract just the question to feed the model
     if "\nAssistant:" in gt_text:
         raw_query = gt_text.split("\nAssistant:")[0].replace("User: ", "").strip()
@@ -134,7 +128,7 @@ def main():
     torch.cuda.empty_cache()
 
     # 1. Load the fully trained model (Base Models + LoRA + MLP Projector)
-    model, vision_processor, language_tokenizer = load_trained_model(OUTPUT_DIR, device=DEVICE)
+    model, vision_processor, language_tokenizer = load_trained_model(MODEL_DIR, device=DEVICE)
 
     # 2. Load the test split of the dataset
     print(f"\nLoading dataset: {DATASET} (Test Split)")

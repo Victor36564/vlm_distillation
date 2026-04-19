@@ -11,7 +11,7 @@ from pathlib import Path
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 from test_LLaVA import load_trained_model
 
-OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__SmolLM-135M__LLaVA"
+MODEL_DIR = "siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
 
 payload = {
     "prompt": "Summarize the image in one sentence.",
@@ -45,7 +45,7 @@ async def startup_event():
     
     # Unpack your custom loading function
     # NOTE: Ensure your load_trained_model returns the clip_tokenizer too!
-    vlm_model, vision_processor, language_tokenizer = load_trained_model(OUTPUT_DIR, device=DEVICE)
+    vlm_model, vision_processor, language_tokenizer = load_trained_model(MODEL_DIR, device=DEVICE)
     print("Model successfully loaded and ready for queries!")
 
 # --- 4. DEFINE THE INFERENCE ENDPOINT ---

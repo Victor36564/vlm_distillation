@@ -1,109 +1,55 @@
-# VLM Distillation
+# VLM Distillation (LLaVA)
 
-Train a simple vision-language captioning model by combining:
+Small toolkit for training and serving a custom vision-language model (VLM) using a vision encoder + LoRA-tuned language model + projector.
 
-- A frozen SigLIP vision encoder: `google/siglip-base-patch16-256`
-- A Qwen language model with LoRA adapters: `Qwen/Qwen2.5-0.5B-Instruct`
-- A learned projector that maps vision features into language embedding space
+## Main Files
 
-The training script fine-tunes LoRA + projector for image caption generation and saves reusable checkpoint artifacts.
+- `vlm_distill_LLaVA.py`: Train pipeline for LLaVA-style data (`llava_images_100k/`). Builds model, trains, and saves checkpoints.
+- `test_LLaVA.py`: Loads a trained checkpoint and runs single-sample inference on the dataset split.
+- `run_model_LLaVA.py`: FastAPI server for inference (`/chat`) from local image path or base64 image.
+- `data_extract.py`: Dataset/data extraction helper.
+- `requirements.txt`: Python dependencies.
+- `checkpoints/`: Saved LoRA adapters + projector weights.
+- `images_test/`: Local images for quick inference testing.
 
-## Repository Structure
-
-- `vlm_distill.py`: training pipeline, model definition, checkpoint saving
-- `test.py`: inference script to generate a caption from an image using saved checkpoints
-- `requirements.txt`: Python dependencies
-- `checkpoints/vlm_distill/`: saved outputs (ignored by git)
-
-## How It Works
-
-1. The vision encoder extracts image tokens from SigLIP.
-2. A linear projector maps vision hidden states to the language model hidden size.
-3. Projected vision tokens are concatenated with text token embeddings.
-4. The LM is trained with caption targets, while vision token labels are masked with `-100`.
-
-## Setup
-
-### 1. Create and activate a virtual environment
+## Quick Setup
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-### 2. Install dependencies
-
-```bash
-pip install -U pip
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Notes:
-
-- `bitsandbytes` is used for 4-bit QLoRA loading on GPU.
-- If you are CPU-only, you may need to remove quantization usage in code for stable runtime.
-
-## Training
-
-Run:
+## Train (LLaVA)
 
 ```bash
-python vlm_distill.py
+python vlm_distill_LLaVA.py
 ```
 
-Current defaults in `main()`:
+Outputs are saved under `<vision>__<lm>__LLaVA/`.
 
-- Dataset: `lmms-lab/LLaVA-ReCap-118K`
-- Batch size: `4`
-- Epochs: `2`
-- Learning rate: `1e-4`
-
-## Saved Checkpoints
-
-After training, artifacts are written to:
-
-- `checkpoints/vlm_distill/language_adapter/`
-- `checkpoints/vlm_distill/projector.pt`
-
-Contents:
-
-- LoRA adapter weights and config (PEFT format)
-- Tokenizer files used by the fine-tuned LM
-- Projector state dict + metadata (`vision_encoder_name`, `language_model_name`)
-
-## Caption Inference
-
-Use the saved model to caption an image:
+## Test a Trained Model
 
 ```bash
-python test.py --image images/bowl.jpg
+python test_LLaVA.py
 ```
 
-Optional flags:
+## Run API Server
 
 ```bash
-python test.py \
-	--image images/bowl.jpg \
-	--checkpoint-dir checkpoints/vlm_distill \
-	--prompt "Describe this image in one concise caption." \
-	--max-new-tokens 64
+python run_model_LLaVA.py
 ```
 
-## Image Size Requirements
+Server starts on `http://0.0.0.0:8000` with endpoint:
 
-No manual resizing is required. The SigLIP processor resizes/preprocesses input images automatically.
+- `POST /chat`
+  - fields: `prompt`, and either `image_path` or `image_base64`
 
-## Troubleshooting
+Example request body:
 
-- Out of memory:
-	- Reduce `batch_size` in `main()`.
-	- Use fewer epochs for quick checks.
-- Slow data loading:
-	- First run may spend time downloading dataset/model files.
-- Poor captions:
-	- Train longer and/or clean filtering for noisy samples.
-
-## Notes
-
-- `checkpoints/` is ignored in `.gitignore`.
-- Saved artifacts are sufficient to run inference with `test.py` after training.
+```json
+{
+  "prompt": "Summarize the image in one sentence.",
+  "image_path": "images_test/bowl.jpg"
+}
+```
