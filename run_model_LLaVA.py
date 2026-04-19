@@ -11,7 +11,7 @@ from pathlib import Path
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 from test_LLaVA import load_trained_model
 
-OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
+OUTPUT_DIR = "checkpoints/dinov3-convnext-tiny-pretrain-lvd1689m__Qwen2.5-0.5B-Instruct__LLaVA"
 
 payload = {
     "prompt": "Summarize the image in one sentence.",
@@ -68,7 +68,7 @@ async def chat_endpoint(request: ChatRequest):
 
     vlm_model.eval()
 
-    raw_image = "images_test/bowl.jpg"
+    raw_image = image
     
     raw_query = request.prompt
     raw_caption = request.ocr_context
