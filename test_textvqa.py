@@ -13,7 +13,7 @@ from vlm_distill_textvqa import VLMModel, Dataset, DATASET, DEVICE, load_vision_
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
 # OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__MiniPLM-Qwen-200M__LLaVAcheckpoint"
-OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__Qwen2.5-0.5B-Instruct__LLaVAcheckpoint"
+OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__textvqacheckpoint"
 
 def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     """

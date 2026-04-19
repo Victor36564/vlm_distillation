@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 # ----- CONFIGS -----
 VISION_ENCODER_NAME = "wkcn/TinyCLIP-ViT-61M-32-Text-29M-LAION400M" # "google/siglip-so400m-patch14-384" "google/siglip-base-patch16-384" "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
-LANGUAGE_MODEL_NAME = "MiniLLM/MiniPLM-Qwen-200M" # "Qwen/Qwen2.5-0.5B-Instruct" "openai-community/gpt2-medium" "MiniLLM/MiniPLM-Qwen-200M" "HuggingFaceTB/SmolLM-135M"
+LANGUAGE_MODEL_NAME = "HuggingFaceTB/SmolLM-135M" # "Qwen/Qwen2.5-0.5B-Instruct" "openai-community/gpt2-medium" "MiniLLM/MiniPLM-Qwen-200M" "HuggingFaceTB/SmolLM-135M"
 MODEL_FINETUNE = True
 
 # 1. UPDATED DATASET REPOSITORY
@@ -85,7 +85,7 @@ class Dataset(torch.utils.data.Dataset):
         
         combined_text = f"User: {human_query}\nAssistant: {gpt_reply}"
 
-        print(item)
+        # print(item)
 
         return image, combined_text
 
@@ -178,16 +178,12 @@ class VLMModel(torch.nn.Module):
         vision_device = next(self.vision_encoder.parameters()).device
         vision_dtype = next(self.vision_encoder.parameters()).dtype
         
-        vision_inputs = {
-            k: v.to(device=vision_device, dtype=vision_dtype) if v.is_floating_point() else v.to(device=vision_device) 
-            for k, v in vision_inputs.items()
-        }
+        vision_inputs = {k: v.to(DEVICE) for k, v in vision_inputs.items()}
 
         with torch.no_grad():
-            vision_outputs = self.vision_encoder(**vision_inputs)
-            vision_features = vision_outputs.last_hidden_state
+            vision_features = self.vision_encoder.vision_model(**vision_inputs).last_hidden_state
 
-        projected_features = self.projector(vision_features.to(device=DEVICE, dtype=torch.bfloat16))
+        projected_features = self.projector(vision_features.to(dtype=torch.bfloat16))
 
         text_embeddings = self.language_model.get_input_embeddings()(input_ids)
 
@@ -252,11 +248,12 @@ def train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, ep
 
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     optimizer.zero_grad()
+    epoch_bar = tqdm(range(epochs), desc="Epochs", unit="epoch")
 
-    for epoch in range(epochs):
-        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}")
-        
-        for step_idx, (raw_image, raw_text) in enumerate(loop):
+    for epoch in epoch_bar:
+        total_loss = 0.0
+        n = 0
+        for step_idx, (raw_image, raw_text) in enumerate(train_loader):
             vision_inputs = vision_processor(
                 images=raw_image, 
                 return_tensors="pt"
@@ -280,8 +277,24 @@ def train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, ep
             if (step_idx + 1) % accumulation_steps == 0 or (step_idx + 1) == len(train_loader):
                 optimizer.step()
                 optimizer.zero_grad()
+            
+            total_loss += outputs.loss.item()
+            n += 1
 
-            loop.set_postfix(loss=outputs.loss.item())
+        
+        epoch_bar.set_postfix(loss=total_loss / n)
+        
+        if (epoch + 1) % 1 == 0:
+            if total_loss / n < best_loss:
+                best_loss = total_loss / n
+
+                save_vlm_model(
+                    model=model,
+                    language_tokenizer=language_tokenizer,
+                    vision_encoder_name=VISION_ENCODER_NAME,
+                    language_model_name=LANGUAGE_MODEL_NAME,
+                    output_dir=OUTPUT_DIR + f"checkpoint"
+                )
 
 def save_vlm_model(model, language_tokenizer, vision_encoder_name, language_model_name, output_dir=OUTPUT_DIR):
     output_path = Path(output_dir)
@@ -315,12 +328,12 @@ def main():
     language_model, language_tokenizer = load_language_model(model_name)
 
     train_dataset = Dataset(DATASET, split="train")
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=20, shuffle=True, collate_fn=collate_fn)
 
     model = VLMModel(vision_encoder, language_model)
     model.projector.to(DEVICE)
 
-    train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, epochs=1, device=DEVICE)
+    train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, epochs=50, device=DEVICE)
 
     save_vlm_model(
         model=model,

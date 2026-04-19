@@ -8,9 +8,9 @@ from peft import PeftModel
 # Ensure your training script is named 'vlm_distill.py'
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 
-MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
+MODEL_DIR = str(Path.cwd())
 
-def load_trained_model(output_dir=MODEL_DIR, device="cuda"):
+def load_trained_model(output_dir=str(Path.cwd()), device="cuda"):
     """
     Loads the base models, attaches the trained LoRA adapter to the language model,
     and injects the trained MLP projector weights.

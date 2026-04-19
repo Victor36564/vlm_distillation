@@ -20,21 +20,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Train (LLaVA)
-
-```bash
-python vlm_distill_LLaVA.py
-```
-
-Outputs are saved under `<vision>__<lm>__LLaVA/`.
-
-## Test a Trained Model
-
-```bash
-python test_LLaVA.py
-```
-
-## Run API Server
+## Run API Server to hit model
 
 ```bash
 python run_model_LLaVA.py

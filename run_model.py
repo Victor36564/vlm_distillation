@@ -11,8 +11,9 @@ from pathlib import Path
 from vlm_distill_textvqa import VLMModel, Dataset, DATASET, DEVICE, load_vision_encoder
 from test_textvqa import load_trained_model
 
-OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__Qwen2.5-0.5B-Instruct__LLaVAcheckpoint"
+OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__textvqacheckpoint"
 
+# example payload
 payload = {
     "prompt": "Summarize the image in one sentence.",
     "ocr_context": "",
@@ -72,8 +73,6 @@ async def chat_endpoint(request: ChatRequest):
     # 1. Fetch raw data
     # raw_image, raw_caption, raw_qa_text = dataset[idx]
 
-    raw_image = "images_test/bowl.jpg"
-
     # # 2. Extract just the question to feed the model
     # if "\nAssistant:" in raw_qa_text:
     #     raw_query = raw_qa_text.split("\nAssistant:")[0].replace("User: ", "").strip()
@@ -82,6 +81,7 @@ async def chat_endpoint(request: ChatRequest):
     #     raw_query = raw_qa_text
     #     expected_answer = "N/A"
     
+    raw_image = image
     raw_query = request.prompt
     raw_caption = request.ocr_context
 
