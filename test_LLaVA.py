@@ -37,8 +37,6 @@ def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
         vision_encoder = vision_encoder.vision_model
     vision_processor = AutoProcessor.from_pretrained(vision_encoder_name, trust_remote_code=True)
 
-    # Load unfrozen vision encoder weights from training (if available)
-    vision_model
     
     for param in vision_encoder.parameters(): 
         param.requires_grad = False

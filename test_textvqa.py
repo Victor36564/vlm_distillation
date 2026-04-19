@@ -12,7 +12,8 @@ from vlm_distill_textvqa import VLMModel, Dataset, DATASET, DEVICE, load_vision_
 # OUTPUT_DIR = "checkpoints/siglip-base-patch16-384__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
 # OUTPUT_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
-OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__MiniPLM-Qwen-200M__LLaVA"
+# OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__MiniPLM-Qwen-200M__LLaVAcheckpoint"
+OUTPUT_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__Qwen2.5-0.5B-Instruct__LLaVAcheckpoint"
 
 def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     """
@@ -54,7 +55,7 @@ def load_trained_model(output_dir=OUTPUT_DIR, device="cuda"):
     language_model.eval()
 
     print("Loading saved tokenizer...")
-    language_tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+    language_tokenizer = AutoTokenizer.from_pretrained(language_model_name)
     if language_tokenizer.pad_token is None:
         language_tokenizer.pad_token = language_tokenizer.eos_token
 

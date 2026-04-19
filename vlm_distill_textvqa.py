@@ -14,8 +14,8 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 # ----- CONFIGS -----
-VISION_ENCODER_NAME = "wkcn/TinyCLIP-ViT-61M-32-Text-29M-LAION400M" # "google/siglip-so400m-patch14-384" "google/siglip-base-patch16-384" "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
-LANGUAGE_MODEL_NAME = "MiniLLM/MiniPLM-Qwen-200M" # "Qwen/Qwen2.5-0.5B-Instruct" "openai-community/gpt2-medium" "MiniLLM/MiniPLM-Qwen-200M" "HuggingFaceTB/SmolLM-135M"
+VISION_ENCODER_NAME = "google/siglip-so400m-patch14-384" # "google/siglip-so400m-patch14-384" "google/siglip-base-patch16-384" "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
+LANGUAGE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct" # "Qwen/Qwen2.5-0.5B-Instruct" "openai-community/gpt2-medium" "MiniLLM/MiniPLM-Qwen-200M" "HuggingFaceTB/SmolLM-135M"
 
 # 1. UPDATED DATASET REPOSITORY
 DATASET = "facebook/textvqa"
@@ -66,7 +66,7 @@ def load_vision_encoder(model_name, freeze=True):
         torch_dtype="auto",
         trust_remote_code=True,
     )
-    # print(model.config)
+    #print(model.config)
 
     print(f"Vision Encoder is running on: {next(model.parameters()).device}")
 
@@ -311,7 +311,7 @@ def save_vlm_model(model, language_tokenizer, vision_encoder_name, language_mode
         "language_model_name": language_model_name,
     }
     torch.save(projector_payload, output_path / "projector.pt")
-    print(f"Saved VLM artifacts (LoRA + Projector) to: {output_path.resolve()}")
+    print(f"\nSaved VLM artifacts (LoRA + Projector) to: {output_path.resolve()}")
 
 def collate_fn(batch):
     # Unpack the 3-item tuple returned by __getitem__
