@@ -253,6 +253,7 @@ def train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, ep
     for epoch in epoch_bar:
         total_loss = 0.0
         n = 0
+        best_loss = float("inf")
         for step_idx, (raw_image, raw_text) in enumerate(train_loader):
             vision_inputs = vision_processor(
                 images=raw_image, 
@@ -281,7 +282,6 @@ def train(model, train_loader, vision_processor, language_tokenizer, lr=2e-4, ep
             total_loss += outputs.loss.item()
             n += 1
 
-        
         epoch_bar.set_postfix(loss=total_loss / n)
         
         if (epoch + 1) % 1 == 0:

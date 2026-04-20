@@ -12,7 +12,7 @@ from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 from test_LLaVA import load_trained_model
 
 # optional model directory if not stored in current working directory
-MODEL_DIR = None
+MODEL_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__SmolLM-135M__LLaVAcheckpoint"
 
 payload = {
     "prompt": "Summarize the image in one sentence.",

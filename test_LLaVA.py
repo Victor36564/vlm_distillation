@@ -8,7 +8,7 @@ from peft import PeftModel
 # Ensure your training script is named 'vlm_distill.py'
 from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
 
-MODEL_DIR = str(Path.cwd())
+MODEL_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__SmolLM-135M__LLaVAcheckpoint"
 
 def load_trained_model(output_dir=str(Path.cwd()), device="cuda"):
     """
