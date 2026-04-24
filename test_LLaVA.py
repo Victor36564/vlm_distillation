@@ -6,9 +6,9 @@ from peft import PeftModel
 
 # Import the architecture and configs from your main training script
 # Ensure your training script is named 'vlm_distill.py'
-from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
+from vlm_distill_LLaVA import VLMModel, PreTrainDataset, InstructDataset, DATASET, DEVICE
 
-MODEL_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__SmolLM-135M__LLaVAcheckpoint"
+MODEL_DIR = "checkpoints/siglip2-so400m-patch14-384__MiniPLM-Qwen-200M__Stage2Epoch1"
 
 def load_trained_model(output_dir=str(Path.cwd()), device="cuda"):
     """
@@ -94,7 +94,7 @@ def test_single_sample(model, dataset, vision_processor, tokenizer, device="cuda
         raw_query = gt_text
         expected_answer = "N/A"
 
-    raw_query = "Is there a bowl in this image?"
+    raw_query = "Provide a brief description of this image."
     # 3. Format using the strict Qwen chat template
     messages = [{"role": "user", "content": raw_query}]
     prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -132,10 +132,10 @@ def main():
 
     # 2. Load the test split of the dataset
     print(f"\nLoading dataset: {DATASET} (Test Split)")
-    test_dataset = Dataset(DATASET, split="train")
+    test_dataset = InstructDataset(DATASET, split="train")
 
     # 3. Run evaluation on a random sample (or specify an idx to test a specific one)
-    test_single_sample(model, test_dataset, vision_processor, language_tokenizer, device=DEVICE, idx=60482)
+    test_single_sample(model, test_dataset, vision_processor, language_tokenizer, device=DEVICE)
 
 if __name__ == "__main__":
     main()

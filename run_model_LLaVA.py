@@ -8,21 +8,28 @@ import base64
 from pathlib import Path
 
 # Import your loading logic and configs from your test/distill scripts
-from vlm_distill_LLaVA import VLMModel, Dataset, DATASET, DEVICE
+from vlm_distill_LLaVA import VLMModel, DEVICE
 from test_LLaVA import load_trained_model
 
 # optional model directory if not stored in current working directory
-MODEL_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__SmolLM-135M__LLaVAcheckpoint"
+# MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__Qwen2.5-0.5B-Instruct__LLaVA"
+# MODEL_DIR = "checkpoints/siglip-base-patch16-384__Qwen2.5-0.5B-Instruct__LLaVA"
+# MODEL_DIR = "checkpoints/TinyCLIP-ViT-61M-32-Text-29M-LAION400M__Qwen2.5-0.5B-Instruct__LLaVAcheckpoint"
+# MODEL_DIR = "checkpoints/dinov3-convnext-tiny-pretrain-lvd1689m__Qwen2.5-0.5B-Instruct__LLaVA"
+
+# MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__gpt2-medium__LLaVA"
+# MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__MiniPLM-Qwen-200M__LLaVA"
+MODEL_DIR = "checkpoints/siglip2-so400m-patch14-384__MiniPLM-Qwen-200M__Stage2Epoch2"
+# MODEL_DIR = "checkpoints/siglip-so400m-patch14-384__SmolLM-135M__LLaVA"
 
 payload = {
-    "prompt": "Summarize the image in one sentence.",
-    "image_path": "/home/vtishkev/vlm_distillation/images_test/bowl.jpg"
+    "prompt": "short caption: describe the image in one sentence.",
+    "image_path": "/home/vtishkev/vlm_distillation/Replica_Top1_Crops/crops/obj0055_view00_000600_000.jpg"
 }
 
 # --- 1. DEFINE API DATA STRUCTURES ---
 class ChatRequest(BaseModel):
     prompt: str
-    ocr_context: str = "a photo" # Default fallback for the CLIP text tower
     image_path: str = None       # Option A: Local file path
     image_base64: str = None     # Option B: Base64 encoded image
 
@@ -75,7 +82,6 @@ async def chat_endpoint(request: ChatRequest):
     raw_image = image
     
     raw_query = request.prompt
-    raw_caption = request.ocr_context
 
     # 3. Format using the strict Qwen chat template
     messages = [{"role": "user", "content": raw_query}]
@@ -95,7 +101,7 @@ async def chat_endpoint(request: ChatRequest):
         vision_inputs=vision_inputs,
         input_ids=input_ids,
         attention_mask=attention_mask,
-        max_new_tokens=40,
+        max_new_tokens=60,
         tokenizer=language_tokenizer
     )
 
