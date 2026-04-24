@@ -1,10 +1,12 @@
 /venv/
 =0.46.1
 /checkpoints/
-llava_images_100k/
+/llava_images_100k/
 blip_100k_subset.json
 blip_laion_cc_sbu_558k.json
 data_extract.py
-__pycache__/
+/__pycache__/
 test.py
 vlm_distill.py
+/coco_images/
+/Replica_Top1_Crops/
